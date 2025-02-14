@@ -1,0 +1,104 @@
+read_restart restart1.relax
+
+newton off
+communicate	single vel yes
+
+neighbor        0.002 bin
+neigh_modify	delay 0
+
+
+#New pair style
+pair_style gran model hertz tangential history 
+pair_coeff	* *
+
+timestep	1.25e-10
+
+
+fix             m1 all property/global youngsModulus peratomtype 69.e8
+fix             m2 all property/global poissonsRatio peratomtype 0.33
+fix             m3 all property/global coefficientRestitution peratomtypepair 1 0.3
+fix             m4 all property/global coefficientFriction peratomtypepair 1 1.05
+
+
+
+fix		gravi all gravity 981. vector 0.0 0.0 -1.0
+
+fix zwalls1 all wall/gran model hertz tangential history primitive type 1  zplane 0.0 temperature 300.
+fix zwalls2 all wall/gran model hertz tangential history primitive type 1  zplane 0.3
+fix xwalls1 all wall/gran model hertz tangential history primitive type 1  xplane 0.0 temperature 300.
+fix xwalls2 all wall/gran model hertz tangential history primitive type 1  xplane 0.1 temperature 300.
+fix ywalls1 all wall/gran model hertz tangential history primitive type 1  yplane -0.015 temperature 300.
+fix ywalls2 all wall/gran model hertz tangential history primitive type 1  yplane 0.015 temperature 300.
+
+
+fix             ftco all property/global thermalConductivity peratomtype 204.e5
+fix             ftca all property/global thermalCapacity peratomtype 9.e6
+fix             heattransfer all heat/gran initial_temperature 300.
+
+
+#apply nve integration to all particles
+fix		integr all nve/sphere
+
+#output settings, include total thermal energy
+compute		rke all erotate/sphere
+#thermo_style	custom step atoms ke c_rke f_heattransfer vol
+thermo		10
+#thermo_modify	lost ignore norm no
+#compute_modify	thermo_temp dynamic yes
+
+run 2
+
+reset_timestep 0
+
+
+#insert the first particles so that dump is not empty
+dump            dmp1 all custom 100000 coord1*.dump id type x y z f_Temp[0]
+
+
+#let the particles settle
+run		10
+
+#------------------------------------------------------------------------------
+
+
+#set particle temperature
+region          0 sphere  0.005 0.0 0.012 0.005 units box
+set             region 0 property/atom Temp 1000.
+
+#run to see heat transfer
+run             10000
+
+
+ label      myloop1
+ variable i loop   2400
+ variable t 	equal (1.25e-10)*10000*(v_i-1)
+ variable omega equal 30000
+  
+
+ variable a equal 27*(v_t)+0.0075*cos(v_omega*v_t+PI)+0.0125
+ variable b equal 0.0075*sin(v_omega*v_t+PI)
+
+
+#print $a
+#print $b
+
+ 
+#set particle temperature 
+#b radius 50micro m
+#a 0.012 =
+region          $i sphere $a $b 0.012 0.005 units box 
+set             region $i property/atom Temp 1000.
+
+#run to see heat transfer
+run             10000
+
+ variable a delete
+ variable b delete
+ variable t delete
+
+
+
+ next i
+ jump    myfile_helix.in  myloop1
+
+write_restart restart1.layer
